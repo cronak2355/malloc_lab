@@ -11,7 +11,7 @@
 #include <unistd.h>
 #include <sys/times.h>
 #include "clock.h"
-
+//깃 커밋 확인용
 
 /******************************************************* 
  * Machine dependent functions 
