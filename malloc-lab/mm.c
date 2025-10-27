@@ -81,7 +81,7 @@ team_t team = {
    0 = free, 1 = allocated */
 
 /* Given block ptr bp, compute address of its header and footer */
-#define HDRP(bp) ((char*)(bp)-WSIZE)
+#define HDRP(bp) ((char*)(bp)-WSIZE) 
 /* 블록 포인터 bp가 주어졌을 때, 해당 블록의 header 주소 계산
    bp는 payload의 시작 주소를 가리키므로, 
    header는 그 앞(WSIZE = 4바이트)에 위치 */
@@ -107,17 +107,49 @@ team_t team = {
    2. GET_SIZE()로 이전 블록의 크기 구함
    3. bp - 이전블록크기 = 이전 블록의 bp */
 
-
+static char *heap_listp;  // 힙의 시작점을 가리킬 포인터
 /*
  * mm_init - initialize the malloc package.
  */
-int mm_init(void)
+int mm_init(void) 
 {
+    /* 초기 빈 힙 생성 (16바이트 할당) */
+    if ((heap_listp = mem_sbrk(4*WSIZE)) == (void *)-1) {
+        return -1;  // 힙 확장 실패 시 -1 반환
+    }
+    /* 힙의 초기 구조 설정 */
+    PUT(heap_listp, 0);                            // Padding: 8바이트 정렬을 위한 더미 워드
+    PUT(heap_listp + (1*WSIZE), PACK(DSIZE, 1));  // Prologue Header: 8바이트, allocated
+    PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1));  // Prologue Footer: 8바이트, allocated  
+    PUT(heap_listp + (3*WSIZE), PACK(0, 1));      // Epilogue Header: 0바이트, allocated
     
+    /* heap_listp를 첫 번째 가용 블록 위치로 이동 (Prologue 다음) */
+    heap_listp += (2*WSIZE);
 
+    if(extend_heap(CHUNKSIZE/WSIZE) == NULL) {
+        return -1;
+    }
+    
+    return 0;  // 초기화 성공
+}
 
+static void *extend_heap(size_t words) {
+    char *bp;
+    size_t size;
 
-    return 0;
+    if(words % 2 == 1) //홀수면 
+    {
+        words += 1; //짝수로 맞춰주기
+    }
+    size = words * WSIZE;  //words의 4바이트 배수의 크기를 넣음
+    if ((bp = mem_sbrk(size)) == (void *)-1) {
+        return NULL;  // 힙 확장 실패 시 NULL 반환
+    }
+    PUT(HDRP(bp), PACK(size, 0)); //현재 header의 주소에 크기와 할당 여부를 넣음
+    PUT(FTRP(bp), PACK(size, 0)); //현재 footer의 주소에 크기와 할당 여부를 넣음
+    PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); //다음 블록의 헤더의 주소에 크기와할당 여부를 넣음
+
+    return bp;
 }
 
 /*
@@ -142,6 +174,8 @@ void *mm_malloc(size_t size)
  */
 void mm_free(void *ptr)
 {
+
+
 }
 
 /*
