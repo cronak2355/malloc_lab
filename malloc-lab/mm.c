@@ -118,7 +118,7 @@ int mm_init(void)
         return -1;  // 힙 확장 실패 시 -1 반환
     }
     /* 힙의 초기 구조 설정 */
-    PUT(heap_listp, 0);                            // Padding: 8바이트 정렬을 위한 더미 워드
+    PUT(heap_listp, 0);                           // Padding: 8바이트 정렬을 위한 더미 워드
     PUT(heap_listp + (1*WSIZE), PACK(DSIZE, 1));  // Prologue Header: 8바이트, allocated
     PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1));  // Prologue Footer: 8바이트, allocated  
     PUT(heap_listp + (3*WSIZE), PACK(0, 1));      // Epilogue Header: 0바이트, allocated
@@ -152,21 +152,81 @@ static void *extend_heap(size_t words) {
     return bp;
 }
 
+static void *find_fit(size_t asize) {
+    char *bp = heap_listp;
+
+    while(GET_SIZE(HDRP(bp)) > 0) { //다음 블록이 있는지 없는지 판별해야함
+        if(GET_SIZE(HDRP(bp)) >= asize && GET_ALLOC(HDRP(bp)) == 0) { //블록이 사이즈가 충분하고 free일 경우 리턴
+            return bp; 
+        }
+        bp = NEXT_BLKP(bp); //찾기 못했을 경우 다음 블록으로
+    }
+    return NULL;
+}
+
+static void place(char *bp, size_t asize) {
+
+    size_t before_size = GET_SIZE(HDRP(bp));
+
+    if(GET_SIZE(HDRP(bp)) == asize) { //Free 블록과 필요한 크기가 똑같을 경우
+        PUT(HDRP(bp), PACK(asize, 1)); //전체 할당
+        PUT(FTRP(bp), PACK(asize, 1)); //전체 할당
+    }
+    else if(GET_SIZE(HDRP(bp)) > asize) { //Free 블록이 필요한 크기보다 클 경우
+        PUT(HDRP(bp), PACK(asize, 1)); //필요한 만큼 할당
+        PUT(FTRP(bp), PACK(asize, 1)); //필요한 만큼 할당
+        PUT(HDRP(NEXT_BLKP(bp)), PACK(before_size - asize, 0)); //나머지는 allocated
+        PUT(FTRP(NEXT_BLKP(bp)), PACK(before_size - asize, 0)); //나머지는 allocated
+    }
+}
+
+
 /*
  * mm_malloc - Allocate a block by incrementing the brk pointer.
- *     Always allocate a block whose size is a multiple of the alignment.
+ * Always allocate a block whose size is a multiple of the alignment.
  */
 void *mm_malloc(size_t size)
 {
-    int newsize = ALIGN(size + SIZE_T_SIZE);
-    void *p = mem_sbrk(newsize);
-    if (p == (void *)-1)
+    // size 0 체크
+    // 크기 계산
+    // find_fit으로 찾기
+    // 찾았으면? place
+    // 못 찾았으면? extend_heap
+    // 반환
+
+
+    size_t asize;      // 조정된 블록 크기 (헤더/푸터/정렬 포함)
+    size_t extendsize; // 힙 확장 시 요청할 크기
+    char *bp;          // 블록 포인터 (페이로드 시작 주소)
+
+    
+    if (size == 0) { // 요청 크기가 0이면 NULL 반환
         return NULL;
-    else
-    {
-        *(size_t *)p = size;
-        return (void *)((char *)p + SIZE_T_SIZE);
     }
+
+    
+    if (size <= DSIZE) { // 요청 크기를 헤더/푸터 및 8바이트 정렬을 포함한 asize로 조정
+        asize = 2 * DSIZE;  // 요청이 8B 이하: 최소 블록 크기인 16B (DSIZE*2)로 설정
+    } else {
+        asize = ALIGN(size + DSIZE); // (size + DSIZE)는 페이로드 + 헤더/푸터 오버헤드를 더한 크기, ALIGN(size + DSIZE)는 이 크기를 8의 배수로 올림 (8바이트 정렬 보장)
+    }
+
+    
+    if ((bp = find_fit(asize)) != NULL) { // 가용 리스트에서 적합한 블록 찾기
+        place(bp, asize); // 찾았으면 할당하고 분할 (place)
+        return bp; // bp는 이미 payload 시작 주소를 가리킴 (HDRP(bp) + WSIZE)
+    }
+
+    
+    extendsize = MAX(asize, CHUNKSIZE); // 적합한 블록을 찾지 못했으면 힙 확장 (extend_heap)
+    
+    
+    if ((bp = extend_heap(extendsize / WSIZE)) == NULL) {  // extend_heap은 워드 단위 크기를 받으므로, 바이트 크기를 WSIZE로 나눔
+        return NULL; // 확장 실패
+    }
+
+    place(bp, asize); // 확장된 새 블록에 할당하고 포인터 반환
+    return bp;
 }
 
 /*
