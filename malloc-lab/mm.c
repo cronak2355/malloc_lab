@@ -229,13 +229,58 @@ void *mm_malloc(size_t size)
     return bp;
 }
 
+
+
 /*
  * mm_free - Freeing a block does nothing.
  */
 void mm_free(void *ptr)
 {
+    if(ptr == NULL) { //ptr이 NULL일 경우 -1 반환
+        return;
+    }
+
+    size_t size = GET_SIZE(HDRP(ptr)); // 현재 블록의 크기
+
+    PUT(HDRP(ptr), PACK(size, 0)); //현재 header의 주소에 크기와 할당 여부를 넣음
+    PUT(FTRP(ptr), PACK(size, 0)); //현재 footer의 주소에 크기와 할당 여부를 넣음
+
+    coalesce(ptr);
+}
+
+void *coalesce(void *ptr) {
+    size_t size;
+    size_t size_prev = GET_SIZE(HDRP(PREV_BLKP(ptr)));
+    size_t size_now = GET_SIZE(HDRP(ptr));
+    size_t size_next = GET_SIZE(HDRP(NEXT_BLKP(ptr)));
+
+    size_t alloc_prev = GET_ALLOC(HDRP(PREV_BLKP(ptr)));
+    size_t alloc_now = GET_ALLOC(HDRP(ptr));
+    size_t alloc_next = GET_ALLOC(HDRP(NEXT_BLKP(ptr)));
 
 
+   if(alloc_prev == 1 && alloc_next == 1) {   // 합칠 게 없음
+        return ptr;
+    }
+    else if(alloc_prev == 1 && alloc_next == 0) {
+        size = size_now + size_next;
+        PUT(HDRP(ptr), PACK(size, 0)); //필요한 만큼 할당
+        PUT(FTRP(NEXT_BLKP(ptr)), PACK(size, 0)); //필요한 만큼 할당
+        return ptr;
+    }
+    else if(alloc_prev == 0 && alloc_next == 1) {
+        size = size_prev + size_now;
+        PUT(HDRP(PREV_BLKP(ptr)), PACK(size, 0)); //필요한 만큼 할당
+        PUT(FTRP(ptr), PACK(size, 0)); //필요한 만큼 할당
+        return PREV_BLKP(ptr);
+    }
+    else if(alloc_prev == 0 && alloc_next == 0) {
+        size = size_prev + size_now + size_next;
+        PUT(HDRP(PREV_BLKP(ptr)), PACK(size, 0)); //필요한 만큼 할당
+        PUT(FTRP(NEXT_BLKP(ptr)), PACK(size, 0)); //필요한 만큼 할당
+        return PREV_BLKP(ptr);
+    }
+    return ptr;
 }
 
 /*
