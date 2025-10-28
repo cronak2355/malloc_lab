@@ -108,6 +108,87 @@ team_t team = {
    3. bp - 이전블록크기 = 이전 블록의 bp */
 
 static char *heap_listp;  // 힙의 시작점을 가리킬 포인터
+
+void *coalesce(void *ptr) {
+    size_t size;
+    size_t size_prev = GET_SIZE(FTRP(PREV_BLKP(ptr)));
+    size_t size_now = GET_SIZE(HDRP(ptr));
+    size_t size_next = GET_SIZE(HDRP(NEXT_BLKP(ptr)));
+
+    size_t alloc_prev = GET_ALLOC(FTRP(PREV_BLKP(ptr)));
+    size_t alloc_now = GET_ALLOC(HDRP(ptr));
+    size_t alloc_next = GET_ALLOC(HDRP(NEXT_BLKP(ptr)));
+
+    /*
+    if (alloc_next == 1 && size_next == 0) {
+        printf("FUCKING ERROR\n");
+        return NULL;
+    }
+    */
+   
+   if(alloc_prev == 1 && alloc_next == 1) {   // 합칠 게 없음
+        return ptr;
+    }
+    else if(alloc_prev == 1 && alloc_next == 0) {
+        size = size_now + size_next;
+        PUT(HDRP(ptr), PACK(size, 0)); //필요한 만큼 할당
+        PUT(FTRP(ptr), PACK(size, 0)); //필요한 만큼 할당
+        return ptr;
+    }
+    else if(alloc_prev == 0 && alloc_next == 1) {
+        size = size_prev + size_now;
+        PUT(HDRP(PREV_BLKP(ptr)), PACK(size, 0)); //필요한 만큼 할당
+        PUT(FTRP(ptr), PACK(size, 0)); //필요한 만큼 할당
+
+        /*
+        char *heap_end = (char *)mem_heap_hi() - WSIZE;
+        printf("ptr %p\n", ptr);
+        printf("heap_end %p\n", heap_end);
+        printf("incresment amount %p\n", heap_end - (char *)ptr);
+        */
+
+        return PREV_BLKP(ptr);
+    }
+    else  {
+        size = size_prev + size_now + size_next;
+        PUT(HDRP(PREV_BLKP(ptr)), PACK(size, 0)); //필요한 만큼 할당
+        PUT(FTRP(NEXT_BLKP(ptr)), PACK(size, 0)); //필요한 만큼 할당
+        return PREV_BLKP(ptr);
+    }
+    return ptr;
+}
+
+
+static void *extend_heap(size_t words) {
+    char *bp;
+    size_t size;
+
+    if(words % 2 == 1) //홀수면 
+    {
+        words += 1; //짝수로 맞춰주기
+    }
+    if(words == 0) {
+        return NULL;
+    }
+
+    // printf("words!!!! %ld\n", words);
+    assert(words % 2 == 0);
+
+    size = words * WSIZE;  //words의 4바이트 배수의 크기를 넣음
+    if ((bp = mem_sbrk(size)) == (void *)-1) {
+        return NULL;  // 힙 확장 실패 시 NULL 반환
+    }
+    PUT(HDRP(bp), PACK(size, 0)); //현재 header의 주소에 크기와 할당 여부를 넣음
+    PUT(FTRP(bp), PACK(size, 0)); //현재 footer의 주소에 크기와 할당 여부를 넣음
+    PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); //다음 블록의 헤더의 주소에 크기와할당 여부를 넣음
+
+    return coalesce(bp);
+}
+
+
+// [ 1 ] [ V ] ?
+
+
 /*
  * mm_init - initialize the malloc package.
  */
@@ -133,24 +214,6 @@ int mm_init(void)
     return 0;  // 초기화 성공
 }
 
-static void *extend_heap(size_t words) {
-    char *bp;
-    size_t size;
-
-    if(words % 2 == 1) //홀수면 
-    {
-        words += 1; //짝수로 맞춰주기
-    }
-    size = words * WSIZE;  //words의 4바이트 배수의 크기를 넣음
-    if ((bp = mem_sbrk(size)) == (void *)-1) {
-        return NULL;  // 힙 확장 실패 시 NULL 반환
-    }
-    PUT(HDRP(bp), PACK(size, 0)); //현재 header의 주소에 크기와 할당 여부를 넣음
-    PUT(FTRP(bp), PACK(size, 0)); //현재 footer의 주소에 크기와 할당 여부를 넣음
-    PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); //다음 블록의 헤더의 주소에 크기와할당 여부를 넣음
-
-    return bp;
-}
 
 static void *find_fit(size_t asize) {
     char *bp = heap_listp;
@@ -236,7 +299,7 @@ void *mm_malloc(size_t size)
  */
 void mm_free(void *ptr)
 {
-    if(ptr == NULL) { //ptr이 NULL일 경우 -1 반환
+    if(ptr == NULL) { //ptr이 NULL일 경우 Return
         return;
     }
 
@@ -248,40 +311,7 @@ void mm_free(void *ptr)
     coalesce(ptr);
 }
 
-void *coalesce(void *ptr) {
-    size_t size;
-    size_t size_prev = GET_SIZE(HDRP(PREV_BLKP(ptr)));
-    size_t size_now = GET_SIZE(HDRP(ptr));
-    size_t size_next = GET_SIZE(HDRP(NEXT_BLKP(ptr)));
 
-    size_t alloc_prev = GET_ALLOC(HDRP(PREV_BLKP(ptr)));
-    size_t alloc_now = GET_ALLOC(HDRP(ptr));
-    size_t alloc_next = GET_ALLOC(HDRP(NEXT_BLKP(ptr)));
-
-
-   if(alloc_prev == 1 && alloc_next == 1) {   // 합칠 게 없음
-        return ptr;
-    }
-    else if(alloc_prev == 1 && alloc_next == 0) {
-        size = size_now + size_next;
-        PUT(HDRP(ptr), PACK(size, 0)); //필요한 만큼 할당
-        PUT(FTRP(NEXT_BLKP(ptr)), PACK(size, 0)); //필요한 만큼 할당
-        return ptr;
-    }
-    else if(alloc_prev == 0 && alloc_next == 1) {
-        size = size_prev + size_now;
-        PUT(HDRP(PREV_BLKP(ptr)), PACK(size, 0)); //필요한 만큼 할당
-        PUT(FTRP(ptr), PACK(size, 0)); //필요한 만큼 할당
-        return PREV_BLKP(ptr);
-    }
-    else if(alloc_prev == 0 && alloc_next == 0) {
-        size = size_prev + size_now + size_next;
-        PUT(HDRP(PREV_BLKP(ptr)), PACK(size, 0)); //필요한 만큼 할당
-        PUT(FTRP(NEXT_BLKP(ptr)), PACK(size, 0)); //필요한 만큼 할당
-        return PREV_BLKP(ptr);
-    }
-    return ptr;
-}
 
 /*
  * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
