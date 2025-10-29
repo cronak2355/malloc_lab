@@ -129,28 +129,20 @@ void *coalesce(void *ptr) {
    if(alloc_prev == 1 && alloc_next == 1) {   // 합칠 게 없음
         return ptr;
     }
-    else if(alloc_prev == 1 && alloc_next == 0) {
-        size = size_now + size_next;
+    else if(alloc_prev == 1 && alloc_next == 0) { //전 블록이 allocated이고 다음 블록이 free인 경우
+        size = size_now + size_next; //현재 블록과 다음 블록의 사이즈를 합침
         PUT(HDRP(ptr), PACK(size, 0)); //필요한 만큼 할당
         PUT(FTRP(ptr), PACK(size, 0)); //필요한 만큼 할당
         return ptr;
     }
-    else if(alloc_prev == 0 && alloc_next == 1) {
-        size = size_prev + size_now;
+    else if(alloc_prev == 0 && alloc_next == 1) { //전 블록이 free이고 다음 블록이 allocated인 경우
+        size = size_prev + size_now; //전 블록과 현재 블록의 사이즈를 합침
         PUT(HDRP(PREV_BLKP(ptr)), PACK(size, 0)); //필요한 만큼 할당
         PUT(FTRP(ptr), PACK(size, 0)); //필요한 만큼 할당
-
-        /*
-        char *heap_end = (char *)mem_heap_hi() - WSIZE;
-        printf("ptr %p\n", ptr);
-        printf("heap_end %p\n", heap_end);
-        printf("incresment amount %p\n", heap_end - (char *)ptr);
-        */
-
         return PREV_BLKP(ptr);
     }
-    else  {
-        size = size_prev + size_now + size_next;
+    else  { //해당되는 경우가 없을 경우
+        size = size_prev + size_now + size_next; // 모두 합침
         PUT(HDRP(PREV_BLKP(ptr)), PACK(size, 0)); //필요한 만큼 할당
         PUT(FTRP(NEXT_BLKP(ptr)), PACK(size, 0)); //필요한 만큼 할당
         return PREV_BLKP(ptr);
@@ -303,7 +295,7 @@ void mm_free(void *ptr)
         return;
     }
 
-    size_t size = GET_SIZE(HDRP(ptr)); // 현재 블록의 크기
+    size_t size = GET_SIZE(HDRP(ptr)); // 현재 블록의 크기를 저장
 
     PUT(HDRP(ptr), PACK(size, 0)); //현재 header의 주소에 크기와 할당 여부를 넣음
     PUT(FTRP(ptr), PACK(size, 0)); //현재 footer의 주소에 크기와 할당 여부를 넣음
