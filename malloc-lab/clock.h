@@ -1,5 +1,3 @@
-/* Routines for using cycle counter */
-
 /* Start the counter */
 void start_counter();
 
@@ -20,3 +18,4 @@ double mhz_full(int verbose, int sleeptime);
 void start_comp_counter();
 
 double get_comp_counter();
+
